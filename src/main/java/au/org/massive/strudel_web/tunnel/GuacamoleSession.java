@@ -1,15 +1,14 @@
-package au.org.massive.strudel_web.vnc;
+package au.org.massive.strudel_web.tunnel;
+
+import au.org.massive.strudel_web.ssh.AbstractSSHClient;
 
 /**
- * Parameters requires for the Guacamole database
+ * Parameters required for the Guacamole database
  *
  * @author jrigby
  */
-public class GuacamoleSession {
-    private static int instanceCount = 0;
-    private int id;
+public abstract class GuacamoleSession extends AbstractTunnelDependency {
     private String name;
-    private String guacHostName;
     private int localPort;
     private String remoteHost;
     private int remotePort;
@@ -17,12 +16,7 @@ public class GuacamoleSession {
     private String password;
 
     public GuacamoleSession() {
-        instanceCount ++;
-        this.id = instanceCount;
-    }
-
-    public int getId() {
-        return id;
+        super();
     }
 
     public void setId(int id) {
@@ -77,17 +71,14 @@ public class GuacamoleSession {
         this.password = password;
     }
 
+    @Override
     public String toString() {
         return getProtocol()+"://"+ getRemoteHost()+":"+ getRemotePort()+"/";
     }
 
     @Override
     public boolean equals(Object o) {
-        if (o instanceof GuacamoleSession) {
-            return toString().equals(o.toString());
-        } else {
-            return false;
-        }
+        return o instanceof GuacamoleSession && toString().equals(o.toString());
     }
 
     @Override

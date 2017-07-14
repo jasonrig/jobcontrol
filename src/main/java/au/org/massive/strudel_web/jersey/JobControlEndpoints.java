@@ -6,9 +6,12 @@ import au.org.massive.strudel_web.Session;
 import au.org.massive.strudel_web.job_control.*;
 import au.org.massive.strudel_web.job_control.TaskFactory.Task;
 import au.org.massive.strudel_web.ssh.SSHExecException;
-import au.org.massive.strudel_web.vnc.GuacamoleSession;
-import au.org.massive.strudel_web.vnc.GuacamoleSessionManager;
+import au.org.massive.strudel_web.tunnel.GuacamoleSession;
+import au.org.massive.strudel_web.tunnel.HTTPTunnel;
+import au.org.massive.strudel_web.tunnel.TunnelDependency;
+import au.org.massive.strudel_web.tunnel.TunnelManager;
 import com.google.gson.Gson;
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.commons.lang3.text.StrSubstitutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,10 +32,7 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Endpoints that act on an HPC system
@@ -326,7 +326,7 @@ public class JobControlEndpoints extends Endpoint {
             viaGateway = systemConfiguration.getLoginHost();
         }
 
-        GuacamoleSession guacSession = GuacamoleSessionManager.startSession(desktopName, vncPassword, viaGateway, remoteHost, remotePort, session);
+        GuacamoleSession guacSession = (GuacamoleSession) TunnelManager.startGuacamoleSession(desktopName, vncPassword, viaGateway, remoteHost, remotePort, session);
 
         Gson gson = new Gson();
         Map<String, Object> responseData = new HashMap<>();
@@ -357,23 +357,16 @@ public class JobControlEndpoints extends Endpoint {
         }
 
         GuacamoleSession guacSession = null;
-        for (GuacamoleSession s : session.getGuacamoleSessionsSet()) {
-            if (s.getId() == guacSessionId) {
-                guacSession = s;
-                break;
+        for (TunnelDependency s : session.getTunnelSessionsSet()) {
+            if (s instanceof GuacamoleSession) {
+                if (s.getId() == guacSessionId) {
+                    guacSession = (GuacamoleSession) s;
+                    break;
+                }
             }
         }
 
-        Gson gson = new Gson();
-        Map<String, String> responseData = new HashMap<>();
-        if (guacSession == null) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "No active session found by supplied ID");
-            return null;
-        } else {
-            GuacamoleSessionManager.endSession(guacSession, session);
-            responseData.put("message", "session deleted");
-        }
-        return gson.toJson(responseData);
+        return stopTunnelMessage(response, guacSession);
     }
 
     /**
@@ -393,19 +386,110 @@ public class JobControlEndpoints extends Endpoint {
             return null;
         }
 
-        List<Map<String, Object>> tunnels = new ArrayList<>(session.getGuacamoleSessionsSet().size());
-        for (GuacamoleSession s : session.getGuacamoleSessionsSet()) {
-            Map<String, Object> tunnel = new HashMap<>();
-            tunnels.add(tunnel);
+        Set<TunnelDependency> tunnelSet = session.getTunnelSessionsSet();
+        List<Map<String, Object>> tunnels = new ArrayList<>(tunnelSet.size());
+        for (TunnelDependency s : tunnelSet) {
+            if (s instanceof GuacamoleSession) {
+                GuacamoleSession guacSession = (GuacamoleSession) s;
+                Map<String, Object> tunnel = new HashMap<>();
+                tunnels.add(tunnel);
 
-            tunnel.put("id", s.getId());
-            tunnel.put("desktopName", s.getName());
-            tunnel.put("password", s.getPassword());
-            tunnel.put("localPort", s.getLocalPort());
+                tunnel.put("id", guacSession.getId());
+                tunnel.put("desktopName", guacSession.getName());
+                tunnel.put("password", guacSession.getPassword());
+                tunnel.put("localPort", guacSession.getLocalPort());
+            }
         }
 
         Gson gson = new Gson();
         return gson.toJson(tunnels);
+    }
+
+    @GET
+    @Path("/proxy/{proxyId}/{remotePath : .+}")
+    public void httpProxy(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") Integer proxyId, @PathParam("remotePath") String remotePath) throws IOException {
+        Session session = getSessionWithCertificateOrSendError(request, response);
+        if (session == null) {
+            return;
+        }
+        for (TunnelDependency t : session.getTunnelSessionsSet()) {
+            if (t instanceof HTTPTunnel && t.getId() == proxyId) {
+                ((HTTPTunnel) t).doRequest(request, response, remotePath, "GET");
+                return;
+            }
+        }
+        response.setStatus(404);
+    }
+
+    @GET
+    @Path("/starthttpproxy")
+    @Produces(MediaType.APPLICATION_JSON)
+    public String startHttpProxy(
+            @QueryParam("remotehost") String remoteHost,
+            @QueryParam("root") String root,
+            @QueryParam("remoteport") Integer remotePort,
+            @QueryParam("via_gateway") String viaGateway,
+            @QueryParam("is_secure") Boolean isSecure,
+            @QueryParam("configuration") String configurationName,
+            @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException {
+        Session session = getSessionWithCertificateOrSendError(request, response);
+        if (session == null) {
+            return null;
+        }
+
+        // This code uses the configuration, if provided, to determine whether the tunnel should use
+        // the login host as a gateway, or whether the tunnel is direct to the target.
+        AbstractSystemConfiguration systemConfiguration = settings.getSystemConfigurations().getSystemConfigurationById(configurationName);
+        if (viaGateway == null && (systemConfiguration == null || !systemConfiguration.isTunnelTerminatedOnLoginHost())) {
+            viaGateway = remoteHost;
+            remoteHost = "localhost";
+        } else if (viaGateway == null) {
+            viaGateway = systemConfiguration.getLoginHost();
+        }
+
+        TunnelDependency httpTunnel = TunnelManager.startHttpTunnel(viaGateway, remoteHost, root, isSecure, remotePort, session);
+
+        Gson gson = new Gson();
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("id", httpTunnel.getId());
+        return gson.toJson(responseData);
+    }
+
+    @GET
+    @Path("/stophttpproxy")
+    @Produces(MediaType.APPLICATION_JSON)
+    public String stopHttpProxy(
+            @QueryParam("id") int proxyId,
+            @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException {
+        Session session = getSessionWithCertificateOrSendError(request, response);
+        if (session == null) {
+            return null;
+        }
+
+        HTTPTunnel httpTunnel = null;
+        for (TunnelDependency s : session.getTunnelSessionsSet()) {
+            if (s instanceof HTTPTunnel) {
+                if (s.getId() == proxyId) {
+                    httpTunnel = (HTTPTunnel) s;
+                    break;
+                }
+            }
+        }
+
+        return stopTunnelMessage(response, httpTunnel);
+    }
+
+    private static String stopTunnelMessage(@Context HttpServletResponse response, TunnelDependency tunnel) throws IOException {
+        Gson gson = new Gson();
+        Map<String, String> responseData = new HashMap<>();
+        if (tunnel == null) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "No active session found by supplied ID");
+            return null;
+        } else {
+            TunnelManager.stopSession(tunnel);
+            responseData.put("message", "session deleted");
+        }
+        return gson.toJson(responseData);
     }
 
     @GET

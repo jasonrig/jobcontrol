@@ -8,8 +8,9 @@ import javax.servlet.http.HttpSession;
 
 import au.org.massive.strudel_web.job_control.UserMessage;
 import au.org.massive.strudel_web.ssh.CertAuthInfo;
+import au.org.massive.strudel_web.tunnel.TunnelDependency;
 import au.org.massive.strudel_web.util.FixedSizeStack;
-import au.org.massive.strudel_web.vnc.GuacamoleSession;
+import au.org.massive.strudel_web.tunnel.GuacamoleSession;
 
 /**
  * An abstraction from the {@link HttpSession} object, mediating access to session attributes
@@ -48,7 +49,7 @@ public class Session {
     private static final String KEY_CERT = "ssh-certificate";
     private static final String OAUTH_BACKEND = "oauth-backend";
     private static final String OAUTH_ACCESS_TOKEN = "oauth-access-token";
-    private static final String GUAC_SESSION = "guacamole-session";
+    private static final String TUNNEL_SESSION = "tunnel-session";
     private static final String USER_MESSAGE_QUEUE = "user-message-queue";
 
     public void setUserEmail(String email) {
@@ -100,25 +101,26 @@ public class Session {
     }
 
     @SuppressWarnings("unchecked")
-    public synchronized Set<GuacamoleSession> getGuacamoleSessionsSet() {
-        Set<GuacamoleSession> guacamoleSessions = (Set<GuacamoleSession>) session.getAttribute(GUAC_SESSION);
-        if (session.getAttribute(GUAC_SESSION) == null) {
-            guacamoleSessions = Collections.newSetFromMap(new ConcurrentHashMap<GuacamoleSession, Boolean>());
-            session.setAttribute(GUAC_SESSION, guacamoleSessions);
+    public synchronized Set<TunnelDependency> getTunnelSessionsSet() {
+        Set<TunnelDependency> allTunnelSessions = (Set<TunnelDependency>) session.getAttribute(TUNNEL_SESSION);
+        if (session.getAttribute(TUNNEL_SESSION) == null) {
+            allTunnelSessions = Collections.newSetFromMap(new ConcurrentHashMap<TunnelDependency, Boolean>());
+            session.setAttribute(TUNNEL_SESSION, allTunnelSessions);
         }
 
         // Handle multiple user sessions - return all Guacamole sessions belonging to the user even if over multiple sessions
         for (Session activeSession : SessionManager.getActiveSessions()) {
             if (!activeSession.getSessionId().equals(this.getSessionId()) && activeSession.hasCertificate() && this.hasCertificate() &&
                     activeSession.getCertificate().getUserName().equals(this.getCertificate().getUserName())) {
-                Set<GuacamoleSession> otherGuacSessions = (Set<GuacamoleSession>) activeSession.getHttpSession().getAttribute(GUAC_SESSION);
-                if (otherGuacSessions != null) {
-                    guacamoleSessions.addAll(otherGuacSessions);
-                    otherGuacSessions.clear();
+                Set<TunnelDependency> otherTunnelSessions = (Set<TunnelDependency>) activeSession.getHttpSession().getAttribute(TUNNEL_SESSION);
+                if (otherTunnelSessions != null) {
+                    allTunnelSessions.addAll(otherTunnelSessions);
+                    otherTunnelSessions.clear();
                 }
             }
         }
-        return guacamoleSessions;
+
+        return allTunnelSessions;
     }
 
     private Map<String, FixedSizeStack<UserMessage>> getUserMessageStacks() {

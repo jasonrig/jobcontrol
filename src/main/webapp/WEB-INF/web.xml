@@ -32,7 +32,7 @@
 		<listener-class>au.org.massive.strudel_web.SessionManager</listener-class>
 	</listener>
 	<listener>
-		<listener-class>au.org.massive.strudel_web.vnc.GuacamoleSessionManager</listener-class>
+		<listener-class>au.org.massive.strudel_web.tunnel.TunnelManager</listener-class>
 	</listener>
 
   <servlet>

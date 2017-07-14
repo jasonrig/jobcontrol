@@ -1,4 +1,4 @@
-package au.org.massive.strudel_web.ssh;
+package au.org.massive.strudel_web.tunnel;
 
 /**
  * Methods to control an SSH tunnel

@@ -26,7 +26,7 @@ public class FeedbackDebugData {
         if (item instanceof String) {
             sb.append((String) item);
         } else if (item instanceof Boolean) {
-            sb.append(String.valueOf((Boolean) item));
+            sb.append(String.valueOf(item));
         } else if (item instanceof List) {
             Iterator<Object> subItemIterator = ((List<Object>) item).iterator();
             appendToStringBuilder(sb, subItemIterator.next());

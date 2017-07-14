@@ -9,10 +9,9 @@ import javax.servlet.http.HttpSession;
 import javax.servlet.http.HttpSessionEvent;
 import javax.servlet.http.HttpSessionListener;
 
-import au.org.massive.strudel_web.vnc.GuacamoleSession;
-import au.org.massive.strudel_web.vnc.GuacamoleSessionManager;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import au.org.massive.strudel_web.tunnel.GuacamoleSession;
+import au.org.massive.strudel_web.tunnel.TunnelDependency;
+import au.org.massive.strudel_web.tunnel.TunnelManager;
 
 /**
  * A session listener that cleans up any leftovers when a session ends, and keeps track of all active sessions
@@ -70,10 +69,10 @@ public class SessionManager implements HttpSessionListener {
             Logging.accessLogger.info("User session ended for " + s.getCertificate().getUserName() + " (" +s.getCertificate().formattedTimeSinceCreated()+")");
         }
 
-        // Clean up any left over guacamole sessions
-        Set<GuacamoleSession> guacSessions = s.getGuacamoleSessionsSet();
-        for (GuacamoleSession guacSession : guacSessions) {
-            GuacamoleSessionManager.endSession(guacSession, s);
+        // Clean up any left over tunnel sessions
+        Set<TunnelDependency> tunnelSessionSet = s.getTunnelSessionsSet();
+        for (TunnelDependency tunnelSession : tunnelSessionSet) {
+            TunnelManager.stopSession(tunnelSession);
         }
 
         sessionMap.remove(s.getSessionId());
