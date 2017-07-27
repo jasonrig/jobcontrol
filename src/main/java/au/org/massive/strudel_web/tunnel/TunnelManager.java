@@ -88,20 +88,17 @@ public class TunnelManager implements ServletContextListener {
                     return s;
                 }
             }
-        } else {
-            Tunnel t = null;
-            try {
-                t = startTunnel(viaGateway, remoteHost, remotePort, session);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            guacSession.linkTunnel(t);
-            guacSession.setLocalPort(t.getLocalPort());
         }
 
-        tunnelSessionSet.add(guacSession);
+        Tunnel t = null;
+        try {
+            t = startTunnel(viaGateway, remoteHost, remotePort, session);
+            guacSession.setLocalPort(t.getLocalPort());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
 
-        return guacSession;
+        return registerTunnel(session, t, guacSession);
     }
 
     public static TunnelDependency startHttpTunnel(String viaGateway, String remoteHost, String root, boolean isSecure, int remotePort, Session session) {
@@ -122,27 +119,31 @@ public class TunnelManager implements ServletContextListener {
                     return s;
                 }
             }
-        } else {
-            Tunnel t = null;
-            try {
-                t = startTunnel(viaGateway, remoteHost, remotePort, session);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            httpTunnel.linkTunnel(t);
         }
 
-        tunnelSessionSet.add(httpTunnel);
+        Tunnel t = null;
+        try {
+            t = startTunnel(viaGateway, remoteHost, remotePort, session);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return registerTunnel(session, t, httpTunnel);
+    }
 
-        return httpTunnel;
+    private static TunnelDependency registerTunnel(Session session, Tunnel tunnel, AbstractTunnelDependency tunnelDependency) {
+
+        final Set<TunnelDependency> tunnelSessionSet = session.getTunnelSessionsSet();
+        tunnelDependency.linkTunnel(tunnel);
+        sshTunnels.put(tunnel.getLocalPort(), tunnelDependency);
+        tunnelSessionSet.add(tunnelDependency);
+
+        return tunnelDependency;
     }
 
     public static void stopSession(TunnelDependency tunnelSession) {
-        for (Integer port : sshTunnels.keySet()) {
-            TunnelDependency t = sshTunnels.get(port);
-            if (t.equals(tunnelSession)) {
-                stopTunnel(port);
-            }
+        Integer port = tunnelSession.getTunnel().getLocalPort();
+        if (sshTunnels.containsKey(port)) {
+            stopTunnel(port);
         }
     }
 
@@ -155,7 +156,6 @@ public class TunnelManager implements ServletContextListener {
         TunnelDependency t = sshTunnels.get(port);
 
         t.onTunnelStop();
-
         if (t.getTunnel().isRunning()) {
             t.getTunnel().stopTunnel();
         }

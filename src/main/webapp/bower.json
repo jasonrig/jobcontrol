@@ -17,5 +17,8 @@
     "angular-resource": "1.5.11",
     "angular-cookies": "1.5.11",
     "jquery": "2.2.4"
+  },
+  "resolutions": {
+    "angular": "1.5.11"
   }
 }

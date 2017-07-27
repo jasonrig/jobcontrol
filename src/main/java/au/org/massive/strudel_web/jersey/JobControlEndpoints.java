@@ -11,7 +11,6 @@ import au.org.massive.strudel_web.tunnel.HTTPTunnel;
 import au.org.massive.strudel_web.tunnel.TunnelDependency;
 import au.org.massive.strudel_web.tunnel.TunnelManager;
 import com.google.gson.Gson;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.commons.lang3.text.StrSubstitutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -405,16 +404,14 @@ public class JobControlEndpoints extends Endpoint {
         return gson.toJson(tunnels);
     }
 
-    @GET
-    @Path("/proxy/{proxyId}/{remotePath : .+}")
-    public void httpProxy(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") Integer proxyId, @PathParam("remotePath") String remotePath) throws IOException {
+    public void httpProxy(HttpServletRequest request, HttpServletResponse response, Integer proxyId, String remotePath, String method) throws IOException, InterruptedException {
         Session session = getSessionWithCertificateOrSendError(request, response);
         if (session == null) {
             return;
         }
         for (TunnelDependency t : session.getTunnelSessionsSet()) {
             if (t instanceof HTTPTunnel && t.getId() == proxyId) {
-                ((HTTPTunnel) t).doRequest(request, response, remotePath, "GET");
+                ((HTTPTunnel) t).doRequest(request, response, remotePath, method);
                 return;
             }
         }
@@ -422,14 +419,26 @@ public class JobControlEndpoints extends Endpoint {
     }
 
     @GET
+    @Path("/proxy/{proxyId}/{remotePath : .*}")
+    public void httpProxyGet(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") Integer proxyId, @PathParam("remotePath") String remotePath) throws IOException, InterruptedException {
+        httpProxy(request, response, proxyId, remotePath, "GET");
+    }
+
+    @POST
+    @Path("/proxy/{proxyId}/{remotePath : .*}")
+    public void httpProxyPost(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") Integer proxyId, @PathParam("remotePath") String remotePath) throws IOException, InterruptedException {
+        httpProxy(request, response, proxyId, remotePath, "POST");
+    }
+
+    @GET
     @Path("/starthttpproxy")
     @Produces(MediaType.APPLICATION_JSON)
     public String startHttpProxy(
             @QueryParam("remotehost") String remoteHost,
-            @QueryParam("root") String root,
-            @QueryParam("remoteport") Integer remotePort,
+            @DefaultValue("/") @QueryParam("root") String root,
+            @DefaultValue("80") @QueryParam("remoteport") Integer remotePort,
             @QueryParam("via_gateway") String viaGateway,
-            @QueryParam("is_secure") Boolean isSecure,
+            @DefaultValue("false") @QueryParam("is_secure") Boolean isSecure,
             @QueryParam("configuration") String configurationName,
             @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException {
         Session session = getSessionWithCertificateOrSendError(request, response);
@@ -477,6 +486,41 @@ public class JobControlEndpoints extends Endpoint {
         }
 
         return stopTunnelMessage(response, httpTunnel);
+    }
+
+    /**
+     * Lists all active VNC sessions for the current user
+     *
+     * @param request  the {@link HttpServletRequest} object injected from the {@link Context}
+     * @param response the {@link HttpServletResponse} object injected from the {@link Context}
+     * @return a list of tunnels
+     * @throws IOException thrown on network IO errors
+     */
+    @GET
+    @Path("/listhttpproxies")
+    @Produces(MediaType.APPLICATION_JSON)
+    public String listHttpProxies(@Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException {
+        Session session = getSessionWithCertificateOrSendError(request, response);
+        if (session == null) {
+            return null;
+        }
+
+        Set<TunnelDependency> tunnelSet = session.getTunnelSessionsSet();
+        List<Map<String, Object>> proxies = new ArrayList<>(tunnelSet.size());
+        for (TunnelDependency s : tunnelSet) {
+            if (s instanceof HTTPTunnel) {
+                HTTPTunnel proxy = (HTTPTunnel) s;
+                Map<String, Object> tunnel = new HashMap<>();
+                proxies.add(tunnel);
+
+                tunnel.put("id", proxy.getId());
+                tunnel.put("remoteHost", proxy.getRemoteHost());
+                tunnel.put("remotePort", proxy.getRemotePort());
+            }
+        }
+
+        Gson gson = new Gson();
+        return gson.toJson(proxies);
     }
 
     private static String stopTunnelMessage(@Context HttpServletResponse response, TunnelDependency tunnel) throws IOException {
