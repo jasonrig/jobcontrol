@@ -39,12 +39,16 @@ public class TunnelManager implements ServletContextListener {
 
             @Override
             public void run() {
-            for (Integer port : sshTunnels.keySet()) {
-                Tunnel t = sshTunnels.get(port).getTunnel();
-                if (!t.isRunning()) {
+                final LinkedList<Integer> toStop = new LinkedList<>();
+                for (Integer port : sshTunnels.keySet()) {
+                    Tunnel t = sshTunnels.get(port).getTunnel();
+                    if (!t.isRunning()) {
+                        toStop.add(port);
+                    }
+                }
+                for (Integer port : toStop) {
                     stopTunnel(port);
                 }
-            }
             }
 
         }, FIVE_SECONDS, FIVE_SECONDS);

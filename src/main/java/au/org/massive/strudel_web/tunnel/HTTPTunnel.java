@@ -1,26 +1,31 @@
 package au.org.massive.strudel_web.tunnel;
 
-import javax.servlet.ServletOutputStream;
+import org.apache.commons.text.StrSubstitutor;
+
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.ws.rs.PathParam;
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.*;
+import java.util.*;
 
 /**
  * Created by jason on 13/7/17.
  */
 public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tunnel {
-    private static final String USER_AGENT = "Strudel Web Proxy";
     private String root;
     private boolean isSecure;
     protected String scheme;
 
 
-    public HTTPTunnel(String root, boolean isSecure) {
+    public HTTPTunnel(String root, boolean isSecure, Map<String, String> wsMappings) {
         super();
+
+        Map<String, String> proxyProps = new HashMap<>();
+        proxyProps.put("id", String.valueOf(this.id));
+
+        root = new StrSubstitutor(proxyProps, "_", "_").replace(root);
+
         this.root = root;
         this.scheme = "http";
         this.isSecure = isSecure;
@@ -73,142 +78,117 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
 
     public void doRequest(HttpServletRequest req, HttpServletResponse res, String path, String method) throws IOException, InterruptedException {
 
-        String reqUrlBase = req.getRequestURL().toString().replaceAll("/$", "");
+        System.out.println("REQ PATH: " + path);
+
+        CookieManager manager = new CookieManager();
+        manager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
+        CookieHandler.setDefault(manager);
 
         HttpURLConnection con = (HttpURLConnection) getURL(path + "?" + req.getQueryString()).openConnection();
-        con.setRequestProperty("User-Agent", USER_AGENT);
 
-        if (method != null) {
-            con.setRequestMethod(method);
-        } else {
-            con.setRequestMethod("GET");
+        if (method == null) {
+            method = "GET";
+        }
+
+        switch (method.toUpperCase()) {
+            case "GET":
+              con.setDoInput(true);
+              break;
+            case "POST":
+            case "PUT":
+                con.setDoOutput(true);
+        }
+        con.setRequestMethod(method);
+        System.out.println("REQ MTD: " + method);
+
+        final Enumeration<String> headerNames = req.getHeaderNames();
+        while (headerNames.hasMoreElements()) {
+            String k = headerNames.nextElement();
+            String v = req.getHeader(k);
+            System.out.println("REQ " + k + ": " + v);
+            con.setRequestProperty(k, v);
         }
 
         boolean hasBody = req.getContentLength() > -1;
 
-        final BufferedReader remoteServerInput = new BufferedReader(new InputStreamReader(con.getInputStream()));
-        final BufferedWriter clientOutput = new BufferedWriter(new OutputStreamWriter(res.getOutputStream()));
 
-        Transform<String> htmlTransformer = new Transform<String>() {
-            private final String jsInterceptCode = "<script>" +
-                    "(function(open) {\n"+
-                    "\n"+
-                    "    XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {\n"+
-                    "\n"+
-                    "        var parser = document.createElement('a');\n" +
-                    "        parser.href = url;\n" +
-                    "        url = '"+ reqUrlBase + "' + parser.pathname + parser.search;\n" +
-                    "        open.call(this, method, url, async, user, pass);\n"+
-                    "    };\n"+
-                    "\n"+
-                    "})(XMLHttpRequest.prototype.open);" +
-                    "</script>";
-            private boolean transformComplete = false;
-            @Override
-            public String doTransform(String data) {
-                if (!transformComplete) {
-                    if (data.toLowerCase().contains("<head>")) {
-                        transformComplete = true;
-                        data = data.replaceFirst("<head>", "<head><base href=\"" + reqUrlBase + "/\">"+jsInterceptCode);
-                    }
-                }
-
-                return data
-                        .replaceAll("href=\"/", "href=\"")
-                        .replaceAll("src=\"/", "src=\"");
-            }
-        };
+        OutputStream clientOutput = res.getOutputStream();
 
         if (hasBody) {
-            con.setDoOutput(true);
-            final BufferedWriter remoteServerOutput = new BufferedWriter(new OutputStreamWriter(con.getOutputStream()));
-            final BufferedReader clientInput = new BufferedReader(new InputStreamReader(req.getInputStream()));
-            BidirectionalConnection bidirectionalConnection = new BidirectionalConnection(clientInput, clientOutput, remoteServerInput, remoteServerOutput, null, htmlTransformer);
-            bidirectionalConnection.start();
-            bidirectionalConnection.join();
+            final OutputStream remoteServerOutput = con.getOutputStream();
+            final InputStream clientRequest = req.getInputStream();
+
+            ConnectionThread connectionThread1 = new ConnectionThread(clientRequest, remoteServerOutput);
+            connectionThread1.start();
+            connectionThread1.join();
             remoteServerOutput.close();
-            clientInput.close();
-        } else {
-            ConnectionThread connectionThread = new ConnectionThread(remoteServerInput, clientOutput, htmlTransformer);
-            connectionThread.start();
-            connectionThread.join();
+            clientRequest.close();
         }
 
-        remoteServerInput.close();
+        // Forward the response headers
+        final List<String> ignoreHeaders = Arrays.asList("null", "Server", "Set-Cookie");
+        for (Map.Entry<String, List<String>> kv : con.getHeaderFields().entrySet()) {
+            if (ignoreHeaders.contains(String.valueOf(kv.getKey()))) {
+                continue;
+            }
+            for (String v : kv.getValue()) {
+                System.out.println("RES " + kv.getKey() + ": "+v);
+                res.addHeader(kv.getKey(), v);
+            }
+        }
+
+        for (HttpCookie c : manager.getCookieStore().getCookies()) {
+            System.out.println("COOKIE " + c.getName() + " : " + c.getValue());
+            res.addCookie(new Cookie(c.getName(), c.getValue()));
+        }
+
+        res.setStatus(con.getResponseCode());
+        InputStream remoteServerResponse = getServerResponseStream(con);
+        ConnectionThread connectionThread = new ConnectionThread(remoteServerResponse, clientOutput);
+        connectionThread.start();
+        connectionThread.join();
         clientOutput.close();
 
+    }
+
+    private InputStream getServerResponseStream(HttpURLConnection con) {
+        InputStream remoteServerInput;
+        try {
+             remoteServerInput = con.getInputStream();
+        } catch (IOException e) {
+             remoteServerInput = con.getErrorStream();
+        }
+        return remoteServerInput;
     }
 
     @Override
     public boolean equals(Object o) {
         try {
-            return o instanceof GuacamoleSession && getURL("").toString().equals(o.toString());
+            return o instanceof HTTPTunnel && getURL("").toString().equals(o.toString());
         } catch (MalformedURLException e) {
             return false;
         }
     }
 
-    private interface Transform<T> {
-        public T doTransform(T data);
-    }
-
     private class ConnectionThread extends Thread {
-        private BufferedWriter w;
-        private BufferedReader r;
-        private Transform<String> transformer;
+        private OutputStream w;
+        private InputStream r;
 
-        public ConnectionThread(BufferedReader r, BufferedWriter w, Transform<String> transformer) {
+        public ConnectionThread(InputStream r, OutputStream w) {
             this.w = w;
             this.r = r;
-            if (transformer == null) {
-                this.transformer = new Transform<String>() {
-                    @Override
-                    public String doTransform(String data) {
-                        return data;
-                    }
-                };
-            } else {
-                this.transformer = transformer;
-            }
         }
 
         @Override
         public void run() {
-            String data;
             try {
-                while ((data = r.readLine()) != null) {
-                    w.write(transformer.doTransform(data));
+                byte[] buf = new byte[1024];
+                int length = 0;
+                while ((length = r.read(buf)) != -1) {
+                    w.write(buf, 0, length);
                 }
                 w.flush();
             } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    private class BidirectionalConnection extends Thread {
-        private ConnectionThread con1;
-        private ConnectionThread con2;
-
-        public BidirectionalConnection(BufferedReader r1, BufferedWriter w1, BufferedReader r2, BufferedWriter w2, Transform<String> t1, Transform<String> t2) {
-            con1 = new ConnectionThread(r1, w2, t1);
-            con2 = new ConnectionThread(r2, w1, t2);
-        }
-
-        @Override
-        public void run() {
-            con1.start();
-            con2.start();
-
-            try {
-                con1.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-
-            try {
-                con2.join();
-            } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
