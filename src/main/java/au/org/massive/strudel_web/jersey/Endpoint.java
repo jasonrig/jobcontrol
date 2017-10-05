@@ -1,11 +1,10 @@
 package au.org.massive.strudel_web.jersey;
 
-import java.io.IOException;
+import au.org.massive.strudel_web.Session;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-
-import au.org.massive.strudel_web.Session;
+import java.io.IOException;
 
 /**
  * Provides some convenience methods for api endpoints to get sessions that are appropriately authorised.

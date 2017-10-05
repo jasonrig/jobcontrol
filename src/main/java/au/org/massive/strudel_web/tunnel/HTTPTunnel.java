@@ -18,7 +18,7 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
     protected String scheme;
 
 
-    public HTTPTunnel(String root, boolean isSecure, Map<String, String> wsMappings) {
+    public HTTPTunnel(String root, boolean isSecure) {
         super();
 
         Map<String, String> proxyProps = new HashMap<>();
@@ -31,7 +31,11 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
         this.isSecure = isSecure;
     }
 
-    public URL getURL(String path) throws MalformedURLException {
+    public boolean isSecure() {
+        return this.isSecure;
+    }
+
+    public URL getURL(String path, String scheme) throws MalformedURLException {
         String separator1 = "";
         if (!this.root.startsWith("/")) {
             separator1 = "/";
@@ -40,7 +44,11 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
         if (!path.startsWith("/") && !root.endsWith("/")) {
             separator2 = "/";
         }
-        return new URL(this.getScheme()+"://localhost:" + String.valueOf(this.getLocalPort()) + separator1 + this.root + separator2 + path);
+        return new URL(scheme+"://localhost:" + String.valueOf(this.getLocalPort()) + separator1 + this.root + separator2 + path);
+    }
+
+    public URL getURL(String path) throws MalformedURLException {
+        return getURL(path, this.getScheme());
     }
 
     private String getScheme() {
