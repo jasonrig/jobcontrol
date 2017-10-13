@@ -1,7 +1,5 @@
 package au.org.massive.strudel_web.tunnel;
 
-import au.org.massive.strudel_web.Session;
-
 import javax.servlet.http.HttpSession;
 import javax.websocket.HandshakeResponse;
 import javax.websocket.server.HandshakeRequest;
@@ -21,8 +19,18 @@ public class WebsocketProxyConfigurator extends ServerEndpointConfig.Configurato
         HttpSession httpSession = (HttpSession) request.getHttpSession();
 
         if (httpSession != null) {
-            config.getUserProperties().put(HTTPTunnel.class.getName(), getAttribute("currentWebsocketTunnel", request));
-            config.getUserProperties().put("remotePath", getAttribute("currentWebsocketTunnelRemotePath", request));
+            Object cookies = getAttribute("cookies", request);
+            if (cookies != null) {
+                config.getUserProperties().put("cookies", cookies);
+            }
+            Object currentWebsocketTunnel = getAttribute("currentWebsocketTunnel", request);
+            if (currentWebsocketTunnel != null) {
+                config.getUserProperties().put(HTTPTunnel.class.getName(), currentWebsocketTunnel);
+            }
+            Object currentWebsocketTunnelRemotePath = getAttribute("currentWebsocketTunnelRemotePath", request);
+            if (currentWebsocketTunnelRemotePath != null) {
+                config.getUserProperties().put("remotePath", currentWebsocketTunnelRemotePath);
+            }
         }
     }
 

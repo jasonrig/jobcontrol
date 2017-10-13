@@ -170,15 +170,13 @@
 			<version>1.1</version>
 			<scope>provided</scope>
 		</dependency>
+
+		<!-- Used for some cookie handling -->
 		<dependency>
-			<groupId>org.eclipse.jetty.websocket</groupId>
-			<artifactId>websocket-client</artifactId>
-			<version>9.4.7.v20170914</version>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
+			<version>4.5.3</version>
 		</dependency>
-
-
-
-
 
 		<!-- logging -->
 		<dependency>

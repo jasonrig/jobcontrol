@@ -411,7 +411,7 @@ public class JobControlEndpoints extends Endpoint {
         }
         for (TunnelDependency t : session.getTunnelSessionsSet()) {
             if (t instanceof HTTPTunnel && t.getId() == proxyId) {
-                ((HTTPTunnel) t).doRequest(request, response, remotePath, method);
+                ((HTTPTunnel) t).doRequest(request, response, remotePath, method, session);
                 return;
             }
         }

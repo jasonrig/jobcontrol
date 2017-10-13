@@ -1,7 +1,9 @@
 package au.org.massive.strudel_web.tunnel;
 
+import au.org.massive.strudel_web.Session;
 import org.apache.commons.text.StrSubstitutor;
 
+import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -84,7 +86,16 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
         return this.getTunnel().isRunning();
     }
 
-    public void doRequest(HttpServletRequest req, HttpServletResponse res, String path, String method) throws IOException, InterruptedException {
+    public void doRequest(HttpServletRequest req, HttpServletResponse res, String path, String method, Session session) throws IOException, InterruptedException {
+
+        if (path.startsWith("api/kernels/")) {
+            try {
+                WebsocketProxyFilter.forwardRequestOr404(req, res, session, getId(), path);
+            } catch (ServletException e) {
+                e.printStackTrace();
+            }
+            return;
+        }
 
         System.out.println("REQ PATH: " + path);
 
@@ -134,20 +145,24 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
         }
 
         // Forward the response headers
+        Map<String, List<String>> conHeaders = con.getHeaderFields();
         final List<String> ignoreHeaders = Arrays.asList("null", "Server", "Set-Cookie");
-        for (Map.Entry<String, List<String>> kv : con.getHeaderFields().entrySet()) {
-            if (ignoreHeaders.contains(String.valueOf(kv.getKey()))) {
+        for (Map.Entry<String, List<String>> kv : conHeaders.entrySet()) {
+            if (ignoreHeaders.contains(kv.getKey())) {
                 continue;
-            }
-            for (String v : kv.getValue()) {
-                System.out.println("RES " + kv.getKey() + ": "+v);
-                res.addHeader(kv.getKey(), v);
+            } else {
+                for (String v : kv.getValue()) {
+                    String key = kv.getKey();
+                    if (key != null) {
+                        System.out.println("RES " + key + ": " + v);
+                        res.addHeader(key, v);
+                    }
+                }
             }
         }
 
         for (HttpCookie c : manager.getCookieStore().getCookies()) {
-            System.out.println("COOKIE " + c.getName() + " : " + c.getValue());
-            res.addCookie(new Cookie(c.getName(), c.getValue()));
+            res.addHeader("Set-Cookie", c.getName()+"="+c.getValue()+"; Path=/");
         }
 
         res.setStatus(con.getResponseCode());

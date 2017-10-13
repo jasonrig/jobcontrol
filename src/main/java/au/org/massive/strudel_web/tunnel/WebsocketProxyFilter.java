@@ -6,10 +6,17 @@ import org.apache.commons.lang3.StringUtils;
 
 import javax.servlet.*;
 import javax.servlet.annotation.WebFilter;
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.CookieHandler;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.HttpCookie;
 import java.util.Arrays;
+import java.util.Enumeration;
+import java.util.List;
 
 @WebFilter(filterName="WebSocketProxyAuthFilter", urlPatterns = {"/api/ws/*"})
 public class WebsocketProxyFilter extends Endpoint implements Filter {
@@ -25,41 +32,53 @@ public class WebsocketProxyFilter extends Endpoint implements Filter {
 
     @Override
     public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
+        System.out.println("WS FILTER: " + ((HttpServletRequest) servletRequest).getPathInfo());
+
         // Ensure that the user is logged in and has a valid certificate
         Session session = getSessionWithCertificateOrSendError((HttpServletRequest) servletRequest, (HttpServletResponse) servletResponse);
         if (session == null) {
             return;
         }
 
+        String[] pathParts;
+        Integer tunnelId;
         try {
-            String[] pathParts = ((HttpServletRequest) servletRequest).getPathInfo().split("/");
+            pathParts = ((HttpServletRequest) servletRequest).getPathInfo().split("/");
             // Get the tunnel id from the path
-            Integer tunnelId = Integer.valueOf(pathParts[2]);
+            tunnelId = Integer.valueOf(pathParts[2]);
+        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+            ((HttpServletResponse) servletResponse).setStatus(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
 
-            String remotePath = "";
-            if (pathParts.length > 3) {
-                remotePath = StringUtils.join(Arrays.copyOfRange(pathParts, 3, pathParts.length), "/");
-            }
-            if (((HttpServletRequest) servletRequest).getQueryString().length() > 0) {
-                remotePath = remotePath + "?" + ((HttpServletRequest) servletRequest).getQueryString();
-            }
-            servletRequest.setAttribute("remotePath", remotePath);
-            // Search through all registered tunnels for that id in the user's session
-            for (TunnelDependency t : session.getTunnelSessionsSet()) {
-                if (t instanceof HTTPTunnel) {
-                    // If a match is found and the tunnel is active, then continue processing the request
-                    if (t.getId() == tunnelId && ((HTTPTunnel) t).isRunning()) {
-                        session.getHttpSession().setAttribute("currentWebsocketTunnel", t);
-                        session.getHttpSession().setAttribute("currentWebsocketTunnelRemotePath", remotePath);
-                        servletRequest.getRequestDispatcher("/api/ws").forward(servletRequest, servletResponse);
-                        //filterChain.doFilter(servletRequest, servletResponse);
-                        return;
-                    }
+        String remotePath = "";
+        if (pathParts.length > 3) {
+            remotePath = StringUtils.join(Arrays.copyOfRange(pathParts, 3, pathParts.length), "/");
+        }
+
+        forwardRequestOr404(servletRequest, servletResponse, session, tunnelId, remotePath);
+    }
+
+    public static void forwardRequestOr404(ServletRequest servletRequest, ServletResponse servletResponse, Session session, Integer tunnelId, String remotePath) throws ServletException, IOException {
+        if (((HttpServletRequest) servletRequest).getQueryString().length() > 0) {
+            remotePath = remotePath + "?" + ((HttpServletRequest) servletRequest).getQueryString();
+        }
+        servletRequest.setAttribute("remotePath", remotePath);
+        // Search through all registered tunnels for that id in the user's session
+        for (TunnelDependency t : session.getTunnelSessionsSet()) {
+            if (t instanceof HTTPTunnel) {
+                // If a match is found and the tunnel is active, then continue processing the request
+                if (t.getId() == tunnelId && ((HTTPTunnel) t).isRunning()) {
+                    List<Cookie> cookies = Arrays.asList(((HttpServletRequest) servletRequest).getCookies());
+                    session.getHttpSession().setAttribute("cookies", cookies);
+                    session.getHttpSession().setAttribute("currentWebsocketTunnel", t);
+                    session.getHttpSession().setAttribute("currentWebsocketTunnelRemotePath", remotePath);
+                    servletRequest.getRequestDispatcher("/api/ws").forward(servletRequest, servletResponse);
+                    return;
                 }
             }
-        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-            // Do nothing.
         }
+
         // Return 404 not found if the tunnel id does not exist for this user
         ((HttpServletResponse) servletResponse).setStatus(HttpServletResponse.SC_NOT_FOUND);
     }
