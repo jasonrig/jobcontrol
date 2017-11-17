@@ -32,7 +32,6 @@ public class WebsocketProxyFilter extends Endpoint implements Filter {
 
     @Override
     public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
-        System.out.println("WS FILTER: " + ((HttpServletRequest) servletRequest).getPathInfo());
 
         // Ensure that the user is logged in and has a valid certificate
         Session session = getSessionWithCertificateOrSendError((HttpServletRequest) servletRequest, (HttpServletResponse) servletResponse);

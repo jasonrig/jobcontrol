@@ -25,7 +25,7 @@ public class WebsocketProxyConfigurator extends ServerEndpointConfig.Configurato
             }
             Object currentWebsocketTunnel = getAttribute("currentWebsocketTunnel", request);
             if (currentWebsocketTunnel != null) {
-                config.getUserProperties().put(HTTPTunnel.class.getName(), currentWebsocketTunnel);
+                config.getUserProperties().put("currentWebsocketTunnel", currentWebsocketTunnel);
             }
             Object currentWebsocketTunnelRemotePath = getAttribute("currentWebsocketTunnelRemotePath", request);
             if (currentWebsocketTunnelRemotePath != null) {

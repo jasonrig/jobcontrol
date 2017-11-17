@@ -14,14 +14,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-@ClientEndpoint
-public class WebsocketClientEndpoint {
+public class WebsocketClientEndpoint extends Endpoint {
 
     private Session userSession;
     private WebsocketMessageHandler messageHandler;
-    public boolean inhibitCloseEvent = false;
+    private boolean inhibitCloseEvent = false;
 
-    public WebsocketClientEndpoint(Endpoint e, URI endpointURI, WebsocketMessageHandler messageHandler, List<Cookie> sessionCookies) throws IOException, DeploymentException {
+    public WebsocketClientEndpoint(URI endpointURI, WebsocketMessageHandler messageHandler, List<Cookie> sessionCookies) throws IOException, DeploymentException {
         WebSocketContainer container = ContainerProvider.getWebSocketContainer();
         ClientEndpointConfig config = ClientEndpointConfig.Builder.create().configurator(new ClientEndpointConfig.Configurator() {
             @Override
@@ -43,9 +42,9 @@ public class WebsocketClientEndpoint {
                 headers.put("Origin", Arrays.asList("http://"+headers.get("Host").get(0)));
             }
         }).build();
-        System.out.println("Connecting to " + endpointURI.toString());
         container.connectToServer(this, config, endpointURI);
-        System.out.println("Connected");
+
+
         this.messageHandler = messageHandler;
     }
 
@@ -58,34 +57,38 @@ public class WebsocketClientEndpoint {
         return this.userSession;
     }
 
-    @OnOpen
+    @Override
     public void onOpen(Session userSession, EndpointConfig config) {
-        System.out.println("Client OnOpen!");
         this.userSession = userSession;
+        this.userSession.addMessageHandler(new MessageHandler.Whole<String>() {
+
+            @Override
+            public void onMessage(String s) {
+                messageHandler.handleMessage(s);
+            }
+        });
+
+        this.userSession.addMessageHandler(new MessageHandler.Whole<ByteBuffer>() {
+            @Override
+            public void onMessage(ByteBuffer byteBuffer) {
+                messageHandler.handleMessage(byteBuffer);
+            }
+        });
+
+        this.userSession.addMessageHandler(new MessageHandler.Whole<PongMessage>() {
+            @Override
+            public void onMessage(PongMessage pongMessage) {
+                messageHandler.handlePong(pongMessage);
+            }
+        });
     }
 
-    @OnClose
+    @Override
     public void onClose(Session userSession, CloseReason closeReason) {
-        System.out.println("Client OnClose!");
         this.userSession = null;
         if (!inhibitCloseEvent) {
             messageHandler.handleClose();
         }
         inhibitCloseEvent = false;
-    }
-
-    @OnMessage
-    public void onMessage(ByteBuffer message) {
-        messageHandler.handleMessage(message);
-    }
-
-    @OnMessage
-    public void onMessage(String message) {
-        messageHandler.handleMessage(message);
-    }
-
-    @OnMessage
-    public void onMessage(PongMessage message) {
-        messageHandler.handlePong(message.getApplicationData());
     }
 }

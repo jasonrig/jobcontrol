@@ -97,8 +97,6 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
             return;
         }
 
-        System.out.println("REQ PATH: " + path);
-
         CookieManager manager = new CookieManager();
         manager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
         CookieHandler.setDefault(manager);
@@ -118,13 +116,11 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
                 con.setDoOutput(true);
         }
         con.setRequestMethod(method);
-        System.out.println("REQ MTD: " + method);
 
         final Enumeration<String> headerNames = req.getHeaderNames();
         while (headerNames.hasMoreElements()) {
             String k = headerNames.nextElement();
             String v = req.getHeader(k);
-            System.out.println("REQ " + k + ": " + v);
             con.setRequestProperty(k, v);
         }
 
@@ -154,7 +150,6 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
                 for (String v : kv.getValue()) {
                     String key = kv.getKey();
                     if (key != null) {
-                        System.out.println("RES " + key + ": " + v);
                         res.addHeader(key, v);
                     }
                 }

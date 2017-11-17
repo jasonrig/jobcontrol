@@ -1,33 +1,21 @@
 package au.org.massive.strudel_web.tunnel;
 
-import org.apache.http.Header;
-import org.apache.http.impl.client.BasicCookieStore;
-import org.apache.http.impl.cookie.BasicClientCookie;
-import org.apache.http.impl.cookie.NetscapeDraftSpec;
-
 import javax.servlet.http.Cookie;
 import javax.websocket.*;
 import javax.websocket.server.ServerEndpoint;
 import java.io.IOException;
-import java.net.HttpCookie;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 
 @ServerEndpoint(value = "/api/ws", configurator = WebsocketProxyConfigurator.class)
-public class WebsocketProxy extends Endpoint {
-
-
-
+public class WebsocketProxy {
 
     private HTTPTunnel getTunnel(Session session) {
-        return (HTTPTunnel) session.getUserProperties().get(HTTPTunnel.class.getName());
+        return (HTTPTunnel) session.getUserProperties().get("currentWebsocketTunnel");
     }
 
     private String getRemotePath(Session session) {
@@ -39,6 +27,7 @@ public class WebsocketProxy extends Endpoint {
     }
 
     private URI getRemoteURI(Session session) {
+
         HTTPTunnel t = getTunnel(session);
         String scheme = "ws";
         if (t.isSecure()) {
@@ -50,14 +39,13 @@ public class WebsocketProxy extends Endpoint {
         } catch (URISyntaxException | MalformedURLException e) {
             throw new RuntimeException(e);
         }
-        System.out.println("!!! WEBSOCKET : " + uri.toString());
         return uri;
     }
 
-    @Override
+    @OnOpen
     public void onOpen(Session session, EndpointConfig endpointConfig) {
         try {
-            WebsocketClientEndpoint wsClient = new WebsocketClientEndpoint(this, getRemoteURI(session), new WebsocketMessageHandler() {
+            WebsocketClientEndpoint wsClient = new WebsocketClientEndpoint(getRemoteURI(session), new WebsocketMessageHandler() {
                 @Override
                 public void handleClose() {
                     try {
@@ -70,7 +58,6 @@ public class WebsocketProxy extends Endpoint {
                 @Override
                 public void handleMessage(ByteBuffer message) {
                     try {
-                        System.out.println("c. Got message (1)");
                         session.getBasicRemote().sendBinary(message);
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -80,7 +67,7 @@ public class WebsocketProxy extends Endpoint {
                 @Override
                 public void handleMessage(String message) {
                     try {
-                        System.out.println("c. Got message (2)");
+                        System.out.println(message);
                         session.getBasicRemote().sendText(message);
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -88,10 +75,9 @@ public class WebsocketProxy extends Endpoint {
                 }
 
                 @Override
-                public void handlePong(ByteBuffer message) {
+                public void handlePong(PongMessage message) {
                     try {
-                        System.out.println("c. Got message ping (3)");
-                        session.getBasicRemote().sendPong(message);
+                        session.getBasicRemote().sendPong(message.getApplicationData());
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -111,7 +97,6 @@ public class WebsocketProxy extends Endpoint {
 
     @OnMessage
     public void onMessage(Session session, ByteBuffer message) {
-        System.out.println("s. Got message (1)");
         WebsocketClientEndpoint wsClient = (WebsocketClientEndpoint) session.getUserProperties().get("wsClient");
         try {
             wsClient.getUserSession().getBasicRemote().sendBinary(message);
@@ -122,7 +107,6 @@ public class WebsocketProxy extends Endpoint {
 
     @OnMessage
     public void onMessage(Session session, String message) {
-        System.out.println("s. Got message (2)");
         WebsocketClientEndpoint wsClient = (WebsocketClientEndpoint) session.getUserProperties().get("wsClient");
         try {
             wsClient.getUserSession().getBasicRemote().sendText(message);
@@ -133,7 +117,6 @@ public class WebsocketProxy extends Endpoint {
 
     @OnMessage
     public void onMessage(Session session, PongMessage message) {
-        System.out.println("s. Got message ping (3)");
         WebsocketClientEndpoint wsClient = (WebsocketClientEndpoint) session.getUserProperties().get("wsClient");
         try {
             wsClient.getUserSession().getBasicRemote().sendPong(message.getApplicationData());
@@ -142,7 +125,7 @@ public class WebsocketProxy extends Endpoint {
         }
     }
 
-    @Override
+    @OnClose
     public void onClose(Session session, CloseReason closeReason) {
         WebsocketClientEndpoint wsClient = (WebsocketClientEndpoint) session.getUserProperties().get("wsClient");
         try {
