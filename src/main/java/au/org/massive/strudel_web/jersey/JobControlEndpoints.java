@@ -404,29 +404,42 @@ public class JobControlEndpoints extends Endpoint {
         return gson.toJson(tunnels);
     }
 
-    public void httpProxy(HttpServletRequest request, HttpServletResponse response, Integer proxyId, String remotePath, String method) throws IOException, InterruptedException {
+    public void httpProxy(HttpServletRequest request, HttpServletResponse response, String proxyId, String remotePath, String method) throws IOException, InterruptedException {
         Session session = getSessionWithCertificateOrSendError(request, response);
         if (session == null) {
             return;
         }
-        for (TunnelDependency t : session.getTunnelSessionsSet()) {
-            if (t instanceof HTTPTunnel && t.getId() == proxyId) {
-                ((HTTPTunnel) t).doRequest(request, response, remotePath, method, session);
-                return;
+        try {
+            // Search for tunnel based on ID
+            Integer id = Integer.valueOf(proxyId);
+            for (TunnelDependency t : session.getTunnelSessionsSet()) {
+                if (t instanceof HTTPTunnel && t.getId() == id) {
+                    ((HTTPTunnel) t).doRequest(request, response, remotePath, method, session);
+                    return;
+                }
+            }
+        } catch (NumberFormatException e) {
+            // Search for tunnel based on alias
+            for (TunnelDependency t : session.getTunnelSessionsSet()) {
+                if (t instanceof HTTPTunnel && ((HTTPTunnel) t).getAlias() != null && ((HTTPTunnel) t).getAlias().equals(proxyId.toLowerCase())) {
+                    ((HTTPTunnel) t).doRequest(request, response, remotePath, method, session);
+                    return;
+                }
             }
         }
+
         response.setStatus(404);
     }
 
     @GET
     @Path("/proxy/{proxyId}/{remotePath : .*}")
-    public void httpProxyGet(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") Integer proxyId, @PathParam("remotePath") String remotePath) throws IOException, InterruptedException {
+    public void httpProxyGet(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") String proxyId, @PathParam("remotePath") String remotePath) throws IOException, InterruptedException {
         httpProxy(request, response, proxyId, remotePath, "GET");
     }
 
     @POST
     @Path("/proxy/{proxyId}/{remotePath : .*}")
-    public void httpProxyPost(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") Integer proxyId, @PathParam("remotePath") String remotePath) throws IOException, InterruptedException {
+    public void httpProxyPost(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") String proxyId, @PathParam("remotePath") String remotePath) throws IOException, InterruptedException {
         httpProxy(request, response, proxyId, remotePath, "POST");
     }
 
@@ -440,6 +453,7 @@ public class JobControlEndpoints extends Endpoint {
             @QueryParam("via_gateway") String viaGateway,
             @DefaultValue("false") @QueryParam("is_secure") Boolean isSecure,
             @QueryParam("configuration") String configurationName,
+            @QueryParam("alias") String alias,
             @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException {
         Session session = getSessionWithCertificateOrSendError(request, response);
         if (session == null) {
@@ -456,11 +470,14 @@ public class JobControlEndpoints extends Endpoint {
             viaGateway = systemConfiguration.getLoginHost();
         }
 
-        TunnelDependency httpTunnel = TunnelManager.startHttpTunnel(viaGateway, remoteHost, root, isSecure, remotePort, session);
+        TunnelDependency httpTunnel = TunnelManager.startHttpTunnel(alias, viaGateway, remoteHost, root, isSecure, remotePort, session);
 
         Gson gson = new Gson();
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("id", httpTunnel.getId());
+        if (alias != null) {
+            responseData.put("alias", ((HTTPTunnel) httpTunnel).getAlias());
+        }
         return gson.toJson(responseData);
     }
 

@@ -15,13 +15,16 @@ import java.util.*;
  * Created by jason on 13/7/17.
  */
 public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tunnel {
+    private String alias;
     private String root;
     private boolean isSecure;
     protected String scheme;
 
 
-    public HTTPTunnel(String root, boolean isSecure) {
+    public HTTPTunnel(String alias, String root, boolean isSecure) {
         super();
+
+        this.alias = alias;
 
         Map<String, String> proxyProps = new HashMap<>();
         proxyProps.put("id", String.valueOf(this.id));
@@ -35,6 +38,10 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
 
     public boolean isSecure() {
         return this.isSecure;
+    }
+
+    public String getAlias() {
+        return this.alias;
     }
 
     public URL getURL(String path, String scheme) throws MalformedURLException {

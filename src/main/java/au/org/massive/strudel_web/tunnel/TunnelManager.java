@@ -105,20 +105,33 @@ public class TunnelManager implements ServletContextListener {
         return registerTunnel(session, t, guacSession);
     }
 
-    public static TunnelDependency startHttpTunnel(String viaGateway, String remoteHost, String root, boolean isSecure, int remotePort, Session session) {
+    public static TunnelDependency startHttpTunnel(String alias, String viaGateway, String remoteHost, String root, boolean isSecure, int remotePort, Session session) {
 
-        final Set<TunnelDependency> tunnelSessionSet = session.getTunnelSessionsSet();
-
-        HTTPTunnel httpTunnel = new HTTPTunnel(root, isSecure) {
+        HTTPTunnel httpTunnel = new HTTPTunnel(alias, root, isSecure) {
             @Override
             public void onTunnelStop() {
-                tunnelSessionSet.remove(this);
+                session.getTunnelSessionsSet().remove(this);
             }
         };
 
+        // Look for duplicate aliases
+        if (alias != null) {
+            alias = alias.toLowerCase();
+            for (TunnelDependency t : session.getTunnelSessionsSet()) {
+                if (t instanceof HTTPTunnel) {
+                    String otherAlias = ((HTTPTunnel) t).getAlias();
+                    if (otherAlias != null) {
+                        if (otherAlias.equals(alias)) {
+                            stopTunnel(((HTTPTunnel) t).getLocalPort());
+                        }
+                    }
+                }
+            }
+        }
+
         // Avoid creating duplicate http tunnels
-        if (tunnelSessionSet.contains(httpTunnel)) {
-            for (TunnelDependency s : tunnelSessionSet) {
+        if (session.getTunnelSessionsSet().contains(httpTunnel)) {
+            for (TunnelDependency s : session.getTunnelSessionsSet()) {
                 if (s.equals(httpTunnel)) {
                     return s;
                 }
