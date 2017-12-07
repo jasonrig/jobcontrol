@@ -28,6 +28,7 @@ public abstract class HTTPTunnel extends AbstractTunnelDependency implements Tun
 
         Map<String, String> proxyProps = new HashMap<>();
         proxyProps.put("id", String.valueOf(this.id));
+        proxyProps.put("alias", String.valueOf(this.alias));
 
         root = new StrSubstitutor(proxyProps, "_", "_").replace(root);
 
