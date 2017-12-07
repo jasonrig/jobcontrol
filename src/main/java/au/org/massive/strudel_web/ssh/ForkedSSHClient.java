@@ -118,6 +118,7 @@ public class ForkedSSHClient extends AbstractSSHClient {
 
             @Override
             public String call() throws Exception {
+                logger.info("Tunnel started: L" + localPort + " -> R" + remotePort + " ("+getRemoteHost()+")");
                 Map<String, String> tunnelFlags = new HashMap<>();
                 tunnelFlags.put("-L" + localPort + ":"+getRemoteHost()+":" + remotePort, "");
                 return exec("sleep infinity", tunnelFlags, watchdog);
@@ -144,6 +145,7 @@ public class ForkedSSHClient extends AbstractSSHClient {
 
             @Override
             public void stopTunnel() {
+                logger.info("Tunnel stopped: L" + localPort + " -> R" + remotePort + " ("+getRemoteHost()+")");
                 watchdog.destroyProcess();
             }
 
