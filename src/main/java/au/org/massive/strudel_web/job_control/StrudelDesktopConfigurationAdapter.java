@@ -2,6 +2,8 @@ package au.org.massive.strudel_web.job_control;
 
 import au.org.massive.strudel_web.util.RegexHelper;
 import com.google.gson.Gson;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -15,6 +17,8 @@ import java.util.regex.Pattern;
  * Reads a JSON configuration file designed for the desktop app, and adapts it for web app use
  */
 public class StrudelDesktopConfigurationAdapter extends HashMap<String, JsonSystemConfiguration> {
+
+    private static final Logger logger = LogManager.getLogger(StrudelDesktopConfigurationAdapter.class);
 
     /**
      * Constructor accepting JSON configuration as a string
@@ -57,9 +61,9 @@ public class StrudelDesktopConfigurationAdapter extends HashMap<String, JsonSyst
      * @throws InvalidJsonConfigurationException thrown if invalid JSON configuration is encountered
      */
     public StrudelDesktopConfigurationAdapter(String configurationNamePrefix, URL url) throws IOException, InvalidJsonConfigurationException {
+        logger.info("Downloading configuration file: " + url.toString());
         BufferedReader in = new BufferedReader(
                 new InputStreamReader(url.openStream()));
-
         StringBuilder jsonFile = new StringBuilder();
         String inputLine;
         while ((inputLine = in.readLine()) != null) {
@@ -67,7 +71,9 @@ public class StrudelDesktopConfigurationAdapter extends HashMap<String, JsonSyst
         }
         in.close();
 
+        logger.info("Download complete! Parsing configuration data.");
         parseConfig(configurationNamePrefix, jsonFile.toString());
+        logger.info("Configuration parsed.");
     }
 
     /**

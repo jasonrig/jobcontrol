@@ -4,6 +4,8 @@ import au.org.massive.strudel_web.job_control.*;
 import org.apache.commons.configuration.Configuration;
 import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import javax.mail.internet.AddressException;
 import javax.mail.internet.InternetAddress;
@@ -38,6 +40,7 @@ public class Settings {
     private String FEEDBACK_EMAIL_SUBJECT;
 
     private static Settings instance;
+    private static final Logger logger = LogManager.getLogger(Settings.class);
 
     private Settings() {
         Configuration config;
@@ -133,6 +136,7 @@ public class Settings {
             String systemConfigName;
             for (int i = 0; (systemConfigName = config.getString("system-configuration-name"+i)) != null; i++) {
                 URL jsonConfigUrl = new URL(config.getString("system-configuration-json-url"+i));
+                logger.info("Registering configuration from JSON data: " + jsonConfigUrl.toString());
                 StrudelDesktopConfigurationAdapter strudelConfig = new StrudelDesktopConfigurationAdapter(systemConfigName+"|", jsonConfigUrl);
                 for (String configId : strudelConfig.keySet()) {
                     AbstractSystemConfiguration c = strudelConfig.get(configId);
