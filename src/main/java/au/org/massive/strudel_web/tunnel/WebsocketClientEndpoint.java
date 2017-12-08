@@ -9,6 +9,7 @@ import javax.servlet.http.Cookie;
 import javax.websocket.*;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
@@ -20,7 +21,7 @@ public class WebsocketClientEndpoint extends Endpoint {
     private WebsocketMessageHandler messageHandler;
     private boolean inhibitCloseEvent = false;
 
-    public WebsocketClientEndpoint(URI endpointURI, WebsocketMessageHandler messageHandler, List<Cookie> sessionCookies) throws IOException, DeploymentException {
+    public WebsocketClientEndpoint(URI endpointURI, WebsocketMessageHandler messageHandler, List<Cookie> sessionCookies) throws IOException, DeploymentException, BufferOverflowException {
         WebSocketContainer container = ContainerProvider.getWebSocketContainer();
         ClientEndpointConfig config = ClientEndpointConfig.Builder.create().configurator(new ClientEndpointConfig.Configurator() {
             @Override
@@ -42,6 +43,7 @@ public class WebsocketClientEndpoint extends Endpoint {
                 headers.put("Origin", Arrays.asList("http://"+headers.get("Host").get(0)));
             }
         }).build();
+
         container.connectToServer(this, config, endpointURI);
 
 
@@ -50,7 +52,11 @@ public class WebsocketClientEndpoint extends Endpoint {
 
     public void stop() throws IOException {
         inhibitCloseEvent = true;
-        userSession.close();
+        try {
+            userSession.close();
+        } catch (NullPointerException e) {
+
+        }
     }
 
     public Session getUserSession() {

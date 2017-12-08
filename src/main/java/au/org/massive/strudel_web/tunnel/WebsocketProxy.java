@@ -1,12 +1,17 @@
 package au.org.massive.strudel_web.tunnel;
 
+import javax.servlet.Servlet;
+import javax.servlet.ServletResponse;
 import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletResponse;
 import javax.websocket.*;
 import javax.websocket.server.ServerEndpoint;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -67,7 +72,6 @@ public class WebsocketProxy {
                 @Override
                 public void handleMessage(String message) {
                     try {
-                        System.out.println(message);
                         session.getBasicRemote().sendText(message);
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -85,7 +89,7 @@ public class WebsocketProxy {
             }, getCookies(session));
 
             session.getUserProperties().put("wsClient", wsClient);
-        } catch (IOException | DeploymentException e) {
+        } catch (BufferOverflowException | IOException | DeploymentException e) {
             try {
                 e.printStackTrace();
                 session.close();

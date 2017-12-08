@@ -22,7 +22,7 @@
 
     <context-param>
         <param-name>log4jConfiguration</param-name>
-        <param-value>file:///usr/share/tomcat8/strudel-web.log4j2.xml</param-value>
+        <param-value>file:///Users/jason/IdeaProjects/jobcontrol/config_example/log4j.xml</param-value>
     </context-param>
 
 	<listener>
