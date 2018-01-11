@@ -298,6 +298,14 @@ public class JobControlEndpoints extends Endpoint {
 
     }
 
+    /**
+     * Retrieves the status of an asynchronous task including any result
+     * @param taskId the task id as returned from an execute endpoint
+     * @param request       the {@link HttpServletRequest} object injected from the {@link Context}
+     * @param response      the {@link HttpServletResponse} object injected from the {@link Context}
+     * @return the command status and result if ready
+     * @throws IOException
+     */
     @GET
     @Path("/task/{taskId}/")
     @Produces(MediaType.APPLICATION_JSON)
@@ -454,6 +462,16 @@ public class JobControlEndpoints extends Endpoint {
         return gson.toJson(tunnels);
     }
 
+    /**
+     * Helper function to make a request over an HTTP proxy on-demand
+     * @param request  the {@link HttpServletRequest} object injected from the {@link Context}
+     * @param response the {@link HttpServletResponse} object injected from the {@link Context}
+     * @param proxyId id or alias assigned to this proxy
+     * @param remotePath the URI relative to the proxy root
+     * @param method HTTP method to use
+     * @throws IOException thrown on network IO errors
+     * @throws InterruptedException thrown if the SSH tunnel has been interrupted
+     */
     public void httpProxy(HttpServletRequest request, HttpServletResponse response, String proxyId, String remotePath, String method) throws IOException, InterruptedException {
         Session session = getSessionWithCertificateOrSendError(request, response);
         if (session == null) {
@@ -481,18 +499,50 @@ public class JobControlEndpoints extends Endpoint {
         response.setStatus(404);
     }
 
+    /**
+     * Performs a GET request over an HTTP proxy
+     * @param request  the {@link HttpServletRequest} object injected from the {@link Context}
+     * @param response the {@link HttpServletResponse} object injected from the {@link Context}
+     * @param proxyId id or alias assigned to this proxy
+     * @param remotePath the URI relative to the proxy root
+     * @throws IOException thrown on network IO errors
+     * @throws InterruptedException thrown if the SSH tunnel has been interrupted
+     */
     @GET
     @Path("/proxy/{proxyId}/{remotePath : .*}")
     public void httpProxyGet(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") String proxyId, @PathParam("remotePath") String remotePath) throws IOException, InterruptedException {
         httpProxy(request, response, proxyId, remotePath, "GET");
     }
 
+    /**
+     * Performs a POST request over an HTTP proxy
+     * @param request  the {@link HttpServletRequest} object injected from the {@link Context}
+     * @param response the {@link HttpServletResponse} object injected from the {@link Context}
+     * @param proxyId id or alias assigned to this proxy
+     * @param remotePath the URI relative to the proxy root
+     * @throws IOException thrown on network IO errors
+     * @throws InterruptedException thrown if the SSH tunnel has been interrupted
+     */
     @POST
     @Path("/proxy/{proxyId}/{remotePath : .*}")
     public void httpProxyPost(@Context HttpServletRequest request, @Context HttpServletResponse response, @PathParam("proxyId") String proxyId, @PathParam("remotePath") String remotePath) throws IOException, InterruptedException {
         httpProxy(request, response, proxyId, remotePath, "POST");
     }
 
+    /**
+     * Sets up an HTTP proxy backed by an SSH tunnel
+     * @param root the root proxy path on the remote server
+     * @param remotePort the remote HTTP port
+     * @param isSecure if true, the proxy will forward requests via HTTPS
+     * @param alias an alternative name by which the proxy can be referenced
+     * @param remoteHost        the host on which the HTTP server is running
+     * @param viaGateway        a gateway through which the tunnel is created (optional, can be inferred if configurationName provided)
+     * @param configurationName the name of the configuration used for this tunnel (optional, recommended)
+     * @param request           the {@link HttpServletRequest} object injected from the {@link Context}
+     * @param response          the {@link HttpServletResponse} object injected from the {@link Context}
+     * @throws IOException thrown on network IO errors
+     * @return the id and alias of the new proxy
+     */
     @GET
     @Path("/starthttpproxy")
     @Produces(MediaType.APPLICATION_JSON)
@@ -531,6 +581,14 @@ public class JobControlEndpoints extends Endpoint {
         return gson.toJson(responseData);
     }
 
+    /**
+     * Stops an HTTP proxy
+     * @param proxyId the id number associated with the proxy
+     * @param request           the {@link HttpServletRequest} object injected from the {@link Context}
+     * @param response          the {@link HttpServletResponse} object injected from the {@link Context}
+     * @return the result of the stop tunnel request
+     * @throws IOException thrown on network IO errors
+     */
     @GET
     @Path("/stophttpproxy")
     @Produces(MediaType.APPLICATION_JSON)
@@ -556,11 +614,11 @@ public class JobControlEndpoints extends Endpoint {
     }
 
     /**
-     * Lists all active VNC sessions for the current user
+     * Lists all active http proxies for the current user
      *
      * @param request  the {@link HttpServletRequest} object injected from the {@link Context}
      * @param response the {@link HttpServletResponse} object injected from the {@link Context}
-     * @return a list of tunnels
+     * @return a list of proxies
      * @throws IOException thrown on network IO errors
      */
     @GET
@@ -613,12 +671,12 @@ public class JobControlEndpoints extends Endpoint {
     /**
      * Returns a list of system messages
      *
-     * @param request
-     * @param response
-     * @param tag
-     * @param type
-     * @return
-     * @throws IOException
+     * @param request  the {@link HttpServletRequest} object injected from the {@link Context}
+     * @param response the {@link HttpServletResponse} object injected from the {@link Context}
+     * @param tag a message tag
+     * @param type a message type
+     * @return a list of system messages
+     * @throws IOException thrown on network IO errors
      */
     @GET
     @Path("/messages/")
@@ -632,6 +690,14 @@ public class JobControlEndpoints extends Endpoint {
         }
     }
 
+    /**
+     * Processes user feedback forms
+     * @param payload the feedback data
+     * @param request  the {@link HttpServletRequest} object injected from the {@link Context}
+     * @param response the {@link HttpServletResponse} object injected from the {@link Context}
+     * @throws MessagingException thrown if email fails to send
+     * @throws IOException thrown on network IO errors
+     */
     @POST
     @Path("/feedback/")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
