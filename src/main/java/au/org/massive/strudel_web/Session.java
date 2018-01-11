@@ -2,10 +2,13 @@ package au.org.massive.strudel_web;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.FutureTask;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 
+import au.org.massive.strudel_web.job_control.AsyncTaskHistory;
+import au.org.massive.strudel_web.job_control.TaskResult;
 import au.org.massive.strudel_web.job_control.UserMessage;
 import au.org.massive.strudel_web.ssh.CertAuthInfo;
 import au.org.massive.strudel_web.tunnel.TunnelDependency;
@@ -51,6 +54,7 @@ public class Session {
     private static final String OAUTH_ACCESS_TOKEN = "oauth-access-token";
     private static final String TUNNEL_SESSION = "tunnel-session";
     private static final String USER_MESSAGE_QUEUE = "user-message-queue";
+    private static final String ASYNC_TASK_HISTORY = "task-history";
 
     public void setUserEmail(String email) {
         session.setAttribute(USER_EMAIL, email);
@@ -146,6 +150,15 @@ public class Session {
             messages.put(tag, getUserMessages(type, tag));
         }
         return messages;
+    }
+
+    public AsyncTaskHistory<TaskResult<List<Map<String, String>>>> getAsyncTaskHistory() {
+        AsyncTaskHistory<TaskResult<List<Map<String, String>>>> tasks = (AsyncTaskHistory<TaskResult<List<Map<String, String>>>>) session.getAttribute(ASYNC_TASK_HISTORY);
+        if (tasks == null) {
+            tasks = new AsyncTaskHistory<>(100);
+            session.setAttribute(USER_MESSAGE_QUEUE, tasks);
+        }
+        return tasks;
     }
 
     /**

@@ -22,7 +22,8 @@ public class AsyncTasks implements ServletContextListener {
 
     @Override
     public void contextInitialized(ServletContextEvent arg0) {
-        executor = Executors.newCachedThreadPool();
+        // Default to 20 concurrent tasks
+        executor = Executors.newFixedThreadPool(20);
     }
 
     public static ExecutorService getExecutorService() {

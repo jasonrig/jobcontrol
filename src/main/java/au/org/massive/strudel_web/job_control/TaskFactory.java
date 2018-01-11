@@ -7,6 +7,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 
 import org.apache.commons.lang3.text.StrSubstitutor;
 
@@ -62,6 +65,10 @@ public class TaskFactory {
             List<UserMessage> messages = config.getMessagesFromCommandOutput(rawCmdResult);
             List<Map<String,String>> processedCmdResult = RegexHelper.processRegexForEachLine(resultRegexPattern, rawCmdResult);
             return new TaskResult<>(messages, processedCmdResult);
+        }
+
+        public FutureTask<TaskResult<List<Map<String, String>>>> runAsync(final Map<String, String> parameters) {
+            return new FutureTask<>(() -> Task.this.run(parameters));
         }
 
         private String createCommand(String commandPattern, Map<String, String> params, Map<String, String> defaultParams, Set<String> requiredParams) throws MissingRequiredTaskParametersException {

@@ -32,6 +32,9 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.FutureTask;
 
 /**
  * Endpoints that act on an HPC system
@@ -167,8 +170,8 @@ public class JobControlEndpoints extends Endpoint {
     @GET
     @Path("/execute/{task}/")
     @Produces(MediaType.APPLICATION_JSON)
-    public String executeJob0(@PathParam("task") String task, @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException, SSHExecException {
-        return executeJob(null, task, null, request, response, 0);
+    public String executeJob0(@DefaultValue("false") @QueryParam("async") boolean runAsync, @PathParam("task") String task, @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException, SSHExecException {
+        return executeJob(null, task, null, request, response, 0, runAsync);
     }
 
     /**
@@ -185,8 +188,8 @@ public class JobControlEndpoints extends Endpoint {
     @GET
     @Path("/execute/{task}/on/{host}/")
     @Produces(MediaType.APPLICATION_JSON)
-    public String executeJob1(@PathParam("host") String host, @PathParam("task") String task, @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException, SSHExecException {
-        return executeJob(host, task, null, request, response, 0);
+    public String executeJob1(@DefaultValue("false") @QueryParam("async") boolean runAsync, @PathParam("host") String host, @PathParam("task") String task, @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException, SSHExecException {
+        return executeJob(host, task, null, request, response, 0, runAsync);
     }
 
     /**
@@ -203,8 +206,8 @@ public class JobControlEndpoints extends Endpoint {
     @GET
     @Path("/execute/{task}/in/{configuration}/")
     @Produces(MediaType.APPLICATION_JSON)
-    public String executeJob2(@PathParam("task") String task, @PathParam("configuration") String configuration, @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException, SSHExecException {
-        return executeJob(null, task, configuration, request, response, 0);
+    public String executeJob2(@DefaultValue("false") @QueryParam("async") boolean runAsync, @PathParam("task") String task, @PathParam("configuration") String configuration, @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException, SSHExecException {
+        return executeJob(null, task, configuration, request, response, 0, runAsync);
     }
 
     /**
@@ -227,7 +230,8 @@ public class JobControlEndpoints extends Endpoint {
                              @PathParam("configuration") String configuration,
                              @Context HttpServletRequest request,
                              @Context HttpServletResponse response,
-                             @DefaultValue("0") @QueryParam("retries") Integer retries) throws IOException, SSHExecException {
+                             @DefaultValue("0") @QueryParam("retries") Integer retries,
+                             @DefaultValue("false") @QueryParam("async") boolean runAsync) throws IOException, SSHExecException {
         Session session = getSessionWithCertificateOrSendError(request, response);
         if (session == null) {
             return null;
@@ -259,19 +263,30 @@ public class JobControlEndpoints extends Endpoint {
             }
 
             try {
-                TaskResult<List<Map<String, String>>> result = remoteTask.run(parameters);
-                Logging.accessLogger.info("Ran task \"" + task + "\" on \"" + host + "\" from configuration \"" + configuration + "\" for " + getUserString(session));
-                if (!result.getUserMessages().isEmpty()) {
-                    session.addUserMessages(result.getUserMessages(), configuration);
+                if (runAsync) {
+                    FutureTask<TaskResult<List<Map<String, String>>>> resultFuture = remoteTask.runAsync(parameters);
+                    Executor executor = AsyncTasks.getExecutorService();
+                    executor.execute(resultFuture);
+                    String identifier = session.getAsyncTaskHistory().put(resultFuture).getKey();
+                    Gson gson = new Gson();
+                    Map<String, String> responseMessage = new HashMap<>();
+                    responseMessage.put("task", identifier);
+                    return gson.toJson(responseMessage);
+                } else {
+                    TaskResult<List<Map<String, String>>> result = remoteTask.run(parameters);
+                    Logging.accessLogger.info("Ran task \"" + task + "\" on \"" + host + "\" from configuration \"" + configuration + "\" for " + getUserString(session));
+                    if (!result.getUserMessages().isEmpty()) {
+                        session.addUserMessages(result.getUserMessages(), configuration);
+                    }
+                    return result.getCommandResultAsJson();
                 }
-                return result.getCommandResultAsJson();
             } catch (MissingRequiredTaskParametersException e) {
                 response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
                 return null;
             } catch (SSHExecException e1) {
                 // If this request fails, try using the default remote host
                 if (retries < 1 && !systemConfiguration.findByTaskType(task).getRemoteHost().isEmpty()) {
-                    return executeJob(null, task, configuration, request, response, 1);
+                    return executeJob(null, task, configuration, request, response, 1, runAsync);
                 } else {
                     throw e1;
                 }
@@ -281,6 +296,41 @@ public class JobControlEndpoints extends Endpoint {
             return null;
         }
 
+    }
+
+    @GET
+    @Path("/task/{taskId}/")
+    @Produces(MediaType.APPLICATION_JSON)
+    public String getTaskStatus(@PathParam("taskId") String taskId, @Context HttpServletRequest request, @Context HttpServletResponse response) throws IOException {
+        Gson gson = new Gson();
+        Map<String, Object> responseMessage = new HashMap<>();
+
+        Session session = getSessionWithCertificateOrSendError(request, response);
+        if (session == null) {
+            return null;
+        }
+
+        AsyncTaskHistory<TaskResult<List<Map<String, String>>>> tasks = session.getAsyncTaskHistory();
+
+        if (!tasks.containsKey(taskId)) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return null;
+        }
+
+        FutureTask<TaskResult<List<Map<String, String>>>> task = tasks.get(taskId);
+        if (!task.isDone()) {
+            responseMessage.put("status", "incomplete");
+        } else {
+            try {
+                responseMessage.put("result", task.get());
+                responseMessage.put("status", "complete");
+            } catch (InterruptedException e) {
+                responseMessage.put("status", "interrupted");
+            } catch (ExecutionException e) {
+                responseMessage.put("status", "error");
+            }
+        }
+        return gson.toJson(responseMessage);
     }
 
 

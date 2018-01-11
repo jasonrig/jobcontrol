@@ -1,6 +1,8 @@
 package au.org.massive.strudel_web.ssh;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 
@@ -58,8 +60,14 @@ public abstract class AbstractSSHClient implements SSHClient {
 
     @Override
     public String exec(String remoteCommands) throws IOException, SSHExecException {
+        Map<String, String> emptyMap = null;
+        return exec(remoteCommands, emptyMap);
+    }
+
+    public String exec(String remoteCommands, Map<String, String> environment) throws IOException, SSHExecException {
         try {
-            return exec(remoteCommands, null);
+            ExecuteWatchdog nullWatchdog = null;
+            return exec(remoteCommands, nullWatchdog);
         } catch (SSHExecException e) {
             logger.error("Error running command "+remoteCommands+" on host "+remoteHost + " via "+viaGateway);
             throw e;
